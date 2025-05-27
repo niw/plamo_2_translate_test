@@ -1,0 +1,10 @@
+[project]
+name = "plamo_2_translate_test"
+version = "0.1.0"
+requires-python = ">= 3.11"
+dependencies = [
+    "torch",
+    "transformers",
+    "numba",
+    "einops",
+]
