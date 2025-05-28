@@ -1,7 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Literal
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -14,23 +14,40 @@ _MODEL_NAME = "pfnet/plamo-2-translate"
 _STOP_STRING = "<|plamo:op|>"
 
 
+def _detect_language(text: str) -> Literal["English", "Japanese"]:
+    ascii_count = sum(1 for c in text if ord(c) < 128)
+    total_count = len(text)
+    if total_count == 0 or ascii_count / total_count > 3.0 / 4.0:
+        return "English"
+    else:
+        return "Japanese"
+
+
 @dataclass
 class Translation:
     text: str
-    from_language: str | None = None
-    to_language: str | None = None
+    language: Literal["Japanese", "English"] | None = None
 
     @property
     def prompt(self) -> str:
-        from_language = self.from_language or "English"
-        to_language = self.to_language or "Japanese"
+        match self.language:
+            case "Japanese":
+                input_lang = "Japanese"
+                output_lang = "English"
+            case "English":
+                input_lang = "Japanese"
+                output_lang = "English"
+            case _:
+                input_lang = _detect_language(self.text)
+                output_lang = "Japanese" if input_lang == "English" else "English"
 
         return f"""<|plamo:op|>dataset
 translation
-<|plamo:op|>input lang={from_language}
+<|plamo:op|>input lang={input_lang}
 {self.text}
-<|plamo:op|>output lang={to_language}
+<|plamo:op|>output lang={output_lang}
 """
+
 
 class Translator:
     def __init__(self, device: str | None = None):
@@ -102,7 +119,9 @@ class Translator:
 
     async def __call__(self, text) -> str:
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(self._executor, self._background_generate, text)
+        return await loop.run_in_executor(
+            self._executor, self._background_generate, text
+        )
 
     def _background_generate_stream(
         self, translation: Translation, *, streamer: AsyncTextIteratorStreamer
@@ -132,6 +151,8 @@ class Translator:
         )
 
         async for token in streamer:
+            if not token:
+                continue
             if token == _STOP_STRING:
                 break
             yield token

@@ -7,4 +7,10 @@ dependencies = [
     "transformers",
     "numba",
     "einops",
+    "httpx",
+    "fastapi",
+    "uvicorn",
 ]
+
+[project.scripts]
+plamo_2_translate_test = "plamo_2_translate_test.cli:main"
